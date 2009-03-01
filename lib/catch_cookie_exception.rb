@@ -10,12 +10,16 @@ class CGI::Session::CookieStore
   # the first time they revisit the site.  Catching the exception here
   # prevents this ugly behavior.
   # This is in a plugin so that it loads after Rails but before environment.rb.
-  def restore
-    @original = read_cookie
-    @data = unmarshal(@original) || {}
+
+  def restore_with_catch
+    restore_without_catch
   rescue CGI::Session::CookieStore::TamperedWithCookie
-    logger = Logger.new("#{RAILS_ROOT}/log/#{RAILS_ENV}.log")
-    logger.warn "Caught TamperedWithCookie exception on #{Time.now}"
+    logger = defined?(::RAILS_DEFAULT_LOGGER) ? ::RAILS_DEFAULT_LOGGER : Logger.new($stderr)
+    env = @session && @session.cgi && @session.cgi.respond_to?(:env_table) && @session.cgi.__send__(:env_table)
+    logger.warn "Possible session hijack attempt on #{Time.now} from #{@session && @session.cgi && @session.cgi.remote_addr || 'unknown remote address'}:\n#{env ? env.keys.sort.collect { |k| sprintf("  %-25s: %s\n", k, env[k]) } : 'no request environment information is available'}"
     @data = {}
   end
+
+  alias_method_chain :restore, :catch
+
 end
